@@ -144,6 +144,14 @@ ifdef LLAMA_CLBLAST
 ggml-opencl.o: ggml-opencl.c ggml-opencl.h
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
+ifdef LLAMA_GENPGO
+	CFLAGS   += -fprofile-generate -fprofile-dir=./prof_data
+	CXXFLAGS += -fprofile-generate -fprofile-dir=./prof_data
+endif
+ifdef LLAMA_USEPGO
+	CFLAGS   += -fprofile-use -fprofile-dir=./prof_data
+	CXXFLAGS += -fprofile-use -fprofile-dir=./prof_data
+endif
 ifneq ($(filter aarch64%,$(UNAME_M)),)
 	# Apple M1, M2, etc.
 	# Raspberry Pi 3, 4, Zero 2 (64-bit)
