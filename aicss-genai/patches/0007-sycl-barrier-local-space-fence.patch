@@ -1,0 +1,117 @@
+From d28d945c649fa54ae6c84e2a098d547441b3e3ac Mon Sep 17 00:00:00 2001
+From: unrahul <unrahul@users.noreply.archlinux.org>
+Date: Thu, 9 Apr 2026 11:23:26 -0700
+Subject: [PATCH 07/12] sycl: add local_space fence to all barrier calls
+
+Replace 18 unfenced barrier() calls with explicit local_space fence.
+Files: fattn-tile.hpp(8), softmax.cpp(5), norm.cpp(2), mmq.cpp(2),
+ggml-sycl.cpp(1). All synchronize local memory only.
+---
+ ggml/src/ggml-sycl/ggml-sycl.cpp |  2 +-
+ ggml/src/ggml-sycl/mmq.cpp       |  4 ++--
+ ggml/src/ggml-sycl/norm.cpp      |  4 ++--
+ ggml/src/ggml-sycl/softmax.cpp   | 10 +++++-----
+ 4 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/ggml/src/ggml-sycl/ggml-sycl.cpp b/ggml/src/ggml-sycl/ggml-sycl.cpp
+index ca35bf49c..ee0a6e39b 100644
+--- a/ggml/src/ggml-sycl/ggml-sycl.cpp
++++ b/ggml/src/ggml-sycl/ggml-sycl.cpp
+@@ -3808,7 +3808,7 @@ __dpct_inline__ static void k_copy_src1_to_contiguous(
+     sycl::nd_item::barrier(sycl::access::fence_space::local_space) for better
+     performance if there is no access to global memory.
+     */
+-    item_ct1.barrier();
++    item_ct1.barrier(sycl::access::fence_space::local_space);
+ 
+     const float * src1_row_original = (const float *)(src1_original + i11*nb11 + i12*nb12);
+     float * src1_row_contiguous = (float *)(src1_contiguous + src1_row*nb11);
+diff --git a/ggml/src/ggml-sycl/mmq.cpp b/ggml/src/ggml-sycl/mmq.cpp
+index cfd0c0e9a..207202bd2 100644
+--- a/ggml/src/ggml-sycl/mmq.cpp
++++ b/ggml/src/ggml-sycl/mmq.cpp
+@@ -1289,7 +1289,7 @@ mul_mat_q(const void *__restrict__ vx, const void *__restrict__ vy,
+             sycl::nd_item::barrier(sycl::access::fence_space::local_space) for
+             better performance if there is no access to global memory.
+             */
+-            item_ct1.barrier();
++            item_ct1.barrier(sycl::access::fence_space::local_space);
+ 
+ // #pragma unroll // unrolling this loop causes too much register pressure
+             for (int k = ir*WARP_SIZE/qr; k < (ir+1)*WARP_SIZE/qr; k += vdr) {
+@@ -1314,7 +1314,7 @@ mul_mat_q(const void *__restrict__ vx, const void *__restrict__ vy,
+             sycl::nd_item::barrier(sycl::access::fence_space::local_space) for
+             better performance if there is no access to global memory.
+             */
+-            item_ct1.barrier();
++            item_ct1.barrier(sycl::access::fence_space::local_space);
+         }
+     }
+ 
+diff --git a/ggml/src/ggml-sycl/norm.cpp b/ggml/src/ggml-sycl/norm.cpp
+index 8612eea75..bde41fffb 100644
+--- a/ggml/src/ggml-sycl/norm.cpp
++++ b/ggml/src/ggml-sycl/norm.cpp
+@@ -94,7 +94,7 @@ static void group_norm_f32(const float* x, float* dst, const int group_size, con
+         sycl::nd_item::barrier(sycl::access::fence_space::local_space) for
+         better performance if there is no access to global memory.
+         */
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+         tmp = 0.f;
+         for (size_t i = 0; i < nreduce; i += 1)
+         {
+@@ -129,7 +129,7 @@ static void group_norm_f32(const float* x, float* dst, const int group_size, con
+         sycl::nd_item::barrier(sycl::access::fence_space::local_space) for
+         better performance if there is no access to global memory.
+         */
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+         tmp = 0.f;
+         for (size_t i = 0; i < nreduce; i += 1)
+         {
+diff --git a/ggml/src/ggml-sycl/softmax.cpp b/ggml/src/ggml-sycl/softmax.cpp
+index fdf9b843e..bce99d414 100644
+--- a/ggml/src/ggml-sycl/softmax.cpp
++++ b/ggml/src/ggml-sycl/softmax.cpp
+@@ -108,12 +108,12 @@ static void soft_max_f32(const float *         x,
+         if (warp_id == 0) {
+             buf_iw[lane_id] = -INFINITY;
+         }
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+ 
+         if (lane_id == 0) {
+             buf_iw[warp_id] = max_val;
+         }
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+ 
+         max_val = buf_iw[lane_id];
+         max_val = warp_reduce_max<WARP_SIZE>(max_val);
+@@ -135,19 +135,19 @@ static void soft_max_f32(const float *         x,
+     // find the sum of exps in the block
+     tmp = warp_reduce_sum<WARP_SIZE>(tmp);
+     if (block_size > WARP_SIZE) {
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+         if (warp_id == 0) {
+             buf_iw[lane_id] = 0.0f;
+             for (size_t i = 1; i < nreduce; i += 1) {
+                 buf_iw[lane_id + i * WARP_SIZE] = 0.f;
+             }
+         }
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+ 
+         if (lane_id == 0) {
+             buf_iw[warp_id] = tmp;
+         }
+-        item_ct1.barrier();
++        item_ct1.barrier(sycl::access::fence_space::local_space);
+ 
+         tmp = buf_iw[lane_id];
+         for (size_t i = 1; i < nreduce; i += 1) {
+-- 
+2.48.1
+
