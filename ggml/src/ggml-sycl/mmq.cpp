@@ -13,6 +13,11 @@
 #include "mmq.hpp"
 #include "vecdotq.hpp"
 
+// Note: MMQ tile layout assumes WARP_SIZE >= 32 (QI4_K = QI5_K = QI6_K = 32).
+// Intel targets set WARP_SIZE=16 (native subgroup size), which makes MMQ dp4a
+// kernels non-functional. MMQ dispatch is disabled in ggml_sycl_supports_mmq().
+// See optimization-workbook.md Step 11 for DPAS upgrade attempt and results.
+
 typedef void (*allocate_tiles_sycl_t)(
     int** x_ql,
     sycl::half2** x_dm,
@@ -1284,7 +1289,7 @@ mul_mat_q(const void *__restrict__ vx, const void *__restrict__ vy,
             sycl::nd_item::barrier(sycl::access::fence_space::local_space) for
             better performance if there is no access to global memory.
             */
-            item_ct1.barrier();
+            item_ct1.barrier(sycl::access::fence_space::local_space);
 
 // #pragma unroll // unrolling this loop causes too much register pressure
             for (int k = ir*WARP_SIZE/qr; k < (ir+1)*WARP_SIZE/qr; k += vdr) {
@@ -1309,7 +1314,7 @@ mul_mat_q(const void *__restrict__ vx, const void *__restrict__ vy,
             sycl::nd_item::barrier(sycl::access::fence_space::local_space) for
             better performance if there is no access to global memory.
             */
-            item_ct1.barrier();
+            item_ct1.barrier(sycl::access::fence_space::local_space);
         }
     }
 
@@ -1815,9 +1820,6 @@ static void ggml_mul_mat_q4_0_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_qs_q4_0_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -1831,7 +1833,7 @@ static void ggml_mul_mat_q4_0_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q4_0<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -1850,9 +1852,6 @@ static void ggml_mul_mat_q4_0_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_qs_q4_0_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -1866,7 +1865,7 @@ static void ggml_mul_mat_q4_0_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q4_0<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -1930,9 +1929,6 @@ static void ggml_mul_mat_q4_1_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_qs_q4_1_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + +mmq_y), cgh);
@@ -1946,7 +1942,7 @@ static void ggml_mul_mat_q4_1_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q4_1<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -1965,9 +1961,6 @@ static void ggml_mul_mat_q4_1_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_qs_q4_1_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + +mmq_y), cgh);
@@ -1981,7 +1974,7 @@ static void ggml_mul_mat_q4_1_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q4_1<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2045,9 +2038,6 @@ static void ggml_mul_mat_q5_0_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q5_0_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2061,7 +2051,7 @@ static void ggml_mul_mat_q5_0_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q5_0<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2080,9 +2070,6 @@ static void ggml_mul_mat_q5_0_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q5_0_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2096,7 +2083,7 @@ static void ggml_mul_mat_q5_0_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q5_0<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2160,9 +2147,6 @@ static void ggml_mul_mat_q5_1_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q5_1_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2176,7 +2160,7 @@ static void ggml_mul_mat_q5_1_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q5_1<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2195,9 +2179,6 @@ static void ggml_mul_mat_q5_1_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q5_1_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2211,7 +2192,7 @@ static void ggml_mul_mat_q5_1_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q5_1<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2275,9 +2256,6 @@ static void ggml_mul_mat_q8_0_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_qs_q8_0_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2291,7 +2269,7 @@ static void ggml_mul_mat_q8_0_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q8_0<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2310,9 +2288,6 @@ static void ggml_mul_mat_q8_0_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_qs_q8_0_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2326,7 +2301,7 @@ static void ggml_mul_mat_q8_0_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q8_0<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2390,9 +2365,6 @@ static void ggml_mul_mat_q2_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q2_K_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2408,7 +2380,7 @@ static void ggml_mul_mat_q2_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q2_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2428,9 +2400,6 @@ static void ggml_mul_mat_q2_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q2_K_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2446,7 +2415,7 @@ static void ggml_mul_mat_q2_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q2_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2513,9 +2482,6 @@ static void ggml_mul_mat_q3_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q3_K_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2533,7 +2499,7 @@ static void ggml_mul_mat_q3_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q3_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2554,9 +2520,6 @@ static void ggml_mul_mat_q3_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q3_K_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2574,7 +2537,7 @@ static void ggml_mul_mat_q3_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q3_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2641,9 +2604,6 @@ static void ggml_mul_mat_q4_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q4_K_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2659,7 +2619,7 @@ static void ggml_mul_mat_q4_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q4_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2679,9 +2639,6 @@ static void ggml_mul_mat_q4_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q4_K_acc_ct1(
                     sycl::range<1>(mmq_y * (WARP_SIZE) + mmq_y), cgh);
@@ -2697,7 +2654,7 @@ static void ggml_mul_mat_q4_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q4_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2762,9 +2719,6 @@ static void ggml_mul_mat_q5_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q5_K_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2780,7 +2734,7 @@ static void ggml_mul_mat_q5_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q5_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2800,9 +2754,6 @@ static void ggml_mul_mat_q5_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_q5_K_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2818,7 +2769,7 @@ static void ggml_mul_mat_q5_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q5_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2883,9 +2834,6 @@ static void ggml_mul_mat_q6_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2901,7 +2849,7 @@ static void ggml_mul_mat_q6_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q6_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
@@ -2921,9 +2869,6 @@ static void ggml_mul_mat_q6_K_q8_1_sycl(const void *vx, const void *vy,
         info::device::max_work_group_size. Adjust the work-group size if needed.
         */
         {
-            dpct::has_capability_or_fail(stream->get_device(),
-                                         {sycl::aspect::fp16});
-
             stream->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<int, 1> tile_x_ql_acc_ct1(
                     sycl::range<1>(mmq_y * (2 * WARP_SIZE) + mmq_y), cgh);
@@ -2939,7 +2884,7 @@ static void ggml_mul_mat_q6_K_q8_1_sycl(const void *vx, const void *vy,
 
                 cgh.parallel_for(
                     sycl::nd_range<3>(block_nums * block_dims, block_dims),
-                    [=](sycl::nd_item<3> item_ct1) {
+                    [=](sycl::nd_item<3> item_ct1) [[intel::reqd_sub_group_size(WARP_SIZE)]] {
                         mul_mat_q6_K<need_check>(
                             vx, vy, dst, ncols_x, nrows_x, ncols_y, nrows_y,
                             nrows_dst, item_ct1,
