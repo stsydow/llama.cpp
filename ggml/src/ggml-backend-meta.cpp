@@ -1276,7 +1276,10 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor_impl(ggml_backend_m
 
         if (init_buf) {
             // the backend that owns the buffer will set .extra
-            ggml_backend_buffer_init_tensor(init_buf, t_ij);
+            const enum ggml_status status = ggml_backend_buffer_init_tensor(init_buf, t_ij);
+            if (status != GGML_STATUS_SUCCESS) {
+                return status;
+            }
         } else {
             t_ij->extra = tensor->extra;
         }
@@ -1289,7 +1292,6 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor_impl(ggml_backend_m
                 t_ij->src[i] = ggml_backend_meta_buffer_simple_tensor(tensor->src[i], j);
             }
         }
-
         simple_tensors.push_back(t_ij);
     }
 
