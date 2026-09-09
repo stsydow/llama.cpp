@@ -1322,11 +1322,16 @@ struct ggml_backend_vk_buffer_context {
     vk_device_ref device;
     vk_buffer dev_buffer;
     std::string name;
+    size_t base_offset;
+    bool is_view;
 
-    ggml_backend_vk_buffer_context(vk_device_ref device, vk_buffer&& dev_buffer, std::string& name) :
+    ggml_backend_vk_buffer_context(vk_device_ref device, const vk_buffer & dev_buffer, const std::string& name,
+            size_t base_offset = 0, bool is_view = false) :
         device(device),
         dev_buffer(dev_buffer),
-        name(name) {
+        name(name),
+        base_offset(base_offset),
+        is_view(is_view) {
     }
 
     ~ggml_backend_vk_buffer_context();

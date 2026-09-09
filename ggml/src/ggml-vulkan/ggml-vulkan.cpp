@@ -331,6 +331,7 @@ bool ggml_vk_concat_supported(const ggml_tensor * src0, const ggml_tensor * src1
     // Quantized tensor rows are block-aligned when created.
     return ggml_is_contiguous_rows(src0) && ggml_is_contiguous_rows(src1) && ggml_is_contiguous_rows(dst);
 }
+
 static bool vk_instance_initialized = false;
 
 vk_instance_t vk_instance;
@@ -12929,14 +12930,25 @@ bool ggml_backend_buffer_is_vk(ggml_backend_buffer_t buffer) {
 void ggml_backend_vk_buffer_free_buffer(ggml_backend_buffer_t buffer) {
     VK_LOG_MEMORY("ggml_backend_vk_buffer_free_buffer()");
     ggml_backend_vk_buffer_context * ctx = (ggml_backend_vk_buffer_context *)buffer->context;
-    ggml_vk_destroy_buffer(ctx->dev_buffer);
     delete ctx;
 }
 
 void * ggml_backend_vk_buffer_get_base(ggml_backend_buffer_t buffer) {
-    return vk_ptr_base;
+    auto * ctx = (ggml_backend_vk_buffer_context *) buffer->context;
+    return (uint8_t *) vk_ptr_base + ctx->base_offset;
+}
 
-    UNUSED(buffer);
+// Create a Vulkan view over a retained range of the same device allocation.
+static ggml_backend_buffer_t ggml_backend_vk_buffer_view(
+        ggml_backend_buffer_t buffer, size_t offset, size_t size) {
+    auto * parent = (ggml_backend_vk_buffer_context *) buffer->context;
+    auto * context = new ggml_backend_vk_buffer_context(
+        parent->device, parent->dev_buffer, parent->name,
+        parent->base_offset + offset, false);
+    ggml_backend_buffer_t view = ggml_backend_buffer_init(
+        buffer->buft, buffer->iface, context, size);
+    view->view_buffer = ggml_backend_vk_buffer_view;
+    return view;
 }
 
 enum ggml_status ggml_backend_vk_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor) {
@@ -13038,7 +13050,8 @@ bool ggml_backend_vk_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const ggml_
 void ggml_backend_vk_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
     ggml_backend_vk_buffer_context * ctx = (ggml_backend_vk_buffer_context *)buffer->context;
 
-    ggml_vk_buffer_memset(ctx->dev_buffer, 0, value, buffer->size);
+    const uint32_t value32 = (uint32_t)value * 0x01010101;
+    ggml_vk_buffer_memset(ctx->dev_buffer, ctx->base_offset, value32, buffer->size);
 }
 
 const char * ggml_backend_vk_buffer_type_name(ggml_backend_buffer_type_t buft) {
@@ -13060,7 +13073,10 @@ ggml_backend_buffer_t ggml_backend_vk_buffer_type_alloc_buffer(ggml_backend_buff
 
     ggml_backend_vk_buffer_context * bufctx = new ggml_backend_vk_buffer_context(ctx->device, std::move(dev_buffer), ctx->name);
 
-    return ggml_backend_buffer_init(buft, ggml_backend_vk_buffer_interface, bufctx, size);
+    ggml_backend_buffer_t buffer = ggml_backend_buffer_init(
+        buft, ggml_backend_vk_buffer_interface, bufctx, size);
+    buffer->view_buffer = ggml_backend_vk_buffer_view;
+    return buffer;
 }
 
 size_t ggml_backend_vk_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
