@@ -62,6 +62,8 @@ set(LLAMA_CORE_SOURCES
     llama-memory-recurrent.h
     llama-memory-requirements.cpp
     llama-memory-requirements.h
+    llama-memory-transition.cpp
+    llama-memory-transition.h
     llama-memory.cpp
     llama-memory.h
     llama-moe-cache.cpp
