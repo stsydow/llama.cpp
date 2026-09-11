@@ -11,43 +11,78 @@ file(GLOB LLAMA_MODELS_SOURCES "models/*.cpp")
 set(LLAMA_CORE_SOURCES
     llama.cpp
     llama-adapter.cpp
+    llama-adapter.h
     llama-arch.cpp
+    llama-arch.h
     llama-batch.cpp
+    llama-batch.h
     llama-chat.cpp
-    llama-context.cpp
-    llama-context-workspace.h
+    llama-chat.h
     llama-context-workspace.cpp
+    llama-context-workspace.h
+    llama-context.cpp
+    llama-context.h
     llama-cparams.cpp
+    llama-cparams.h
+    llama-ext.h
     llama-grammar.cpp
+    llama-grammar.h
     llama-graph.cpp
+    llama-graph.h
     llama-hparams.cpp
+    llama-hparams.h
     llama-impl.cpp
+    llama-impl.h
     llama-io.cpp
-    llama-kv-cache.cpp
-    llama-kv-cache-iswa.cpp
-    llama-kv-cache-dsa.cpp
+    llama-io.h
     llama-kv-cache-dsa-iswa.cpp
-    llama-kv-cache-msa.cpp
+    llama-kv-cache-dsa-iswa.h
+    llama-kv-cache-dsa.cpp
+    llama-kv-cache-dsa.h
     llama-kv-cache-dsv4.cpp
-    llama-memory.cpp
-    llama-moe-cache.cpp
+    llama-kv-cache-dsv4.h
+    llama-kv-cache-iswa.cpp
+    llama-kv-cache-iswa.h
+    llama-kv-cache-msa.cpp
+    llama-kv-cache-msa.h
+    llama-kv-cache.cpp
+    llama-kv-cache.h
+    llama-kv-cells.h
+    llama-memory-hybrid-idx.cpp
+    llama-memory-hybrid-idx.h
+    llama-memory-hybrid-iswa.cpp
+    llama-memory-hybrid-iswa.h
+    llama-memory-hybrid.cpp
+    llama-memory-hybrid.h
+    llama-memory-layout.cpp
+    llama-memory-layout.h
     llama-memory-plan.cpp
     llama-memory-plan.h
+    llama-memory-recurrent.cpp
+    llama-memory-recurrent.h
     llama-memory-requirements.cpp
     llama-memory-requirements.h
-    llama-memory-hybrid.cpp
-    llama-memory-hybrid-iswa.cpp
-    llama-memory-hybrid-idx.cpp
-    llama-memory-recurrent.cpp
+    llama-memory.cpp
+    llama-memory.h
+    llama-moe-cache.cpp
     llama-mmap.cpp
+    llama-mmap.h
     llama-model-loader.cpp
+    llama-model-loader.h
     llama-model-saver.cpp
+    llama-model-saver.h
     llama-model.cpp
+    llama-model.h
     llama-quant.cpp
+    llama-quant.h
     llama-sampler.cpp
+    llama-sampler.h
     llama-vocab.cpp
+    llama-vocab.h
     unicode-data.cpp
+    unicode-data.h
     unicode.cpp
+    unicode.h
 )
 
 add_library(llama
