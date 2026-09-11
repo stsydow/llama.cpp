@@ -48,6 +48,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-cache.cpp
     llama-kv-cache.h
     llama-kv-cells.h
+    llama-memory-executor-cuda.cpp
+    llama-memory-executor-cuda.h
     llama-memory-executor.cpp
     llama-memory-executor.h
     llama-memory-hybrid-idx.cpp
