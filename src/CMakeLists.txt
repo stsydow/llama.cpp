@@ -52,6 +52,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-cells.h
     llama-kv-stream-config.cpp
     llama-kv-stream-config.h
+    llama-kv-stream-policy.cpp
+    llama-kv-stream-policy.h
     llama-memory-executor-cuda.cpp
     llama-memory-executor-cuda.h
     llama-memory-executor.cpp
