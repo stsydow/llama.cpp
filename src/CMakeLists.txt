@@ -60,6 +60,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-host.h
     llama-kv-stream-policy.cpp
     llama-kv-stream-policy.h
+    llama-kv-stream-resident.cpp
+    llama-kv-stream-resident.h
     llama-memory-executor-cuda.cpp
     llama-memory-executor-cuda.h
     llama-memory-executor.cpp
