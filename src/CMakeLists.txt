@@ -18,6 +18,8 @@ set(LLAMA_CORE_SOURCES
     llama-batch.h
     llama-chat.cpp
     llama-chat.h
+    llama-context-memory.cpp
+    llama-context-memory.h
     llama-context-workspace.cpp
     llama-context-workspace.h
     llama-context.cpp
