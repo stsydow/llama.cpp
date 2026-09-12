@@ -50,6 +50,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-cache.cpp
     llama-kv-cache.h
     llama-kv-cells.h
+    llama-kv-stream-config.cpp
+    llama-kv-stream-config.h
     llama-memory-executor-cuda.cpp
     llama-memory-executor-cuda.h
     llama-memory-executor.cpp
