@@ -56,6 +56,7 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-config.h
     llama-kv-stream-content.cpp
     llama-kv-stream-content.h
+    llama-kv-stream-feedback.h
     llama-kv-stream-host.cpp
     llama-kv-stream-host.h
     llama-kv-stream-policy.cpp
