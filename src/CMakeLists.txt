@@ -52,6 +52,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-cells.h
     llama-kv-stream-binding.cpp
     llama-kv-stream-binding.h
+    llama-kv-stream-capture.cpp
+    llama-kv-stream-capture.h
     llama-kv-stream-config.cpp
     llama-kv-stream-config.h
     llama-kv-stream-content.cpp
