@@ -61,11 +61,15 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-feedback.h
     llama-kv-stream-host.cpp
     llama-kv-stream-host.h
+    llama-kv-stream-model.cpp
+    llama-kv-stream-model.h
     llama-kv-stream-policy.cpp
     llama-kv-stream-policy.h
     llama-kv-stream-prefetch.h
     llama-kv-stream-resident.cpp
     llama-kv-stream-resident.h
+    llama-kv-stream-session.cpp
+    llama-kv-stream-session.h
     llama-kv-stream-writer.cpp
     llama-kv-stream-writer.h
     llama-memory-executor-cuda.cpp
