@@ -74,6 +74,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-session.h
     llama-kv-stream-writer.cpp
     llama-kv-stream-writer.h
+    llama-memory-budget.cpp
+    llama-memory-budget.h
     llama-memory-completion.cpp
     llama-memory-completion.h
     llama-memory-executor-cuda.cpp
