@@ -61,6 +61,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-feedback.h
     llama-kv-stream-host.cpp
     llama-kv-stream-host.h
+    llama-kv-stream-layer-lease.cpp
+    llama-kv-stream-layer-lease.h
     llama-kv-stream-model.cpp
     llama-kv-stream-model.h
     llama-kv-stream-policy.cpp
