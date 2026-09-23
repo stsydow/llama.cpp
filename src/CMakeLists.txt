@@ -92,10 +92,14 @@ set(LLAMA_CORE_SOURCES
     llama-memory-hybrid.h
     llama-memory-layout.cpp
     llama-memory-layout.h
+    llama-memory-phase-owner.cpp
+    llama-memory-phase-owner.h
     llama-memory-phase.cpp
     llama-memory-phase.h
     llama-memory-plan.cpp
     llama-memory-plan.h
+    llama-memory-recurrent-spill.cpp
+    llama-memory-recurrent-spill.h
     llama-memory-recurrent.cpp
     llama-memory-recurrent.h
     llama-memory-requirements.cpp
