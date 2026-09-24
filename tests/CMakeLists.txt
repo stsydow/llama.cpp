@@ -263,6 +263,26 @@ if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
     # Test state save/load functionality across all architectures, using the generated dummy models
     llama_test(
         test-save-load-state
+    )
+    set_tests_properties(test-save-load-state PROPERTIES
+        FIXTURES_REQUIRED generate-models
+        ENVIRONMENT "LLAMA_RS_HOST_SPILL=1;LLAMA_RS_STAGED_PUBLICATION=1;LLAMA_RS_TEST_DEPTH=3"
+    )
+
+    llama_test(
+        test-recurrent-state-rollback
+        NAME test-recurrent-staged-multilayer
+        LABEL main
+        ARGS -m "${MODEL_DIR}/qwen35-multi-recurrent.gguf" -ngl 0
+    )
+    set_tests_properties(test-recurrent-staged-multilayer PROPERTIES
+        FIXTURES_REQUIRED generate-models
+        ENVIRONMENT "LLAMA_RS_HOST_SPILL=1;LLAMA_RS_STAGED_PUBLICATION=1;LLAMA_RS_TEST_DEPTH=3"
+    )
+
+    llama_test(
+        test-recurrent-state-rollback
+        NAME test-recurrent-state-rollback-nemotron-h
         LABEL main
         ARGS --models "${MODEL_DIR}"
     )
