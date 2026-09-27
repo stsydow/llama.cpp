@@ -67,6 +67,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-logical-cache.h
     llama-kv-stream-model.cpp
     llama-kv-stream-model.h
+    llama-kv-stream-mtp-proxy.cpp
+    llama-kv-stream-mtp-proxy.h
     llama-kv-stream-policy.cpp
     llama-kv-stream-policy.h
     llama-kv-stream-prefetch.h
