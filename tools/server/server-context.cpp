@@ -289,6 +289,7 @@ struct server_slot {
     std::string  debug_generated_text;
     llama_tokens generated_tokens;
     size_t n_sent_text = 0; // number of sent text character (i.e. handle partial UTF-8 on streaming)
+    size_t n_sent_tokens = 0;
 
     std::vector<completion_token_output> generated_token_probs;
 
@@ -387,6 +388,7 @@ struct server_slot {
         stop           = STOP_TYPE_NONE;
         stopping_word  = "";
         n_sent_text    = 0;
+        n_sent_tokens  = 0;
 
         if (can_speculate()) {
             spec_draft.clear();
@@ -2101,6 +2103,16 @@ private:
             slot.has_next_token = false;
 
             SLT_DBG(slot, "%s", "stopped by EOS\n");
+        }
+
+        if (incomplete && !slot.has_next_token) {
+            repair_generated_utf8(slot.generated_text, slot.n_sent_text, true);
+            result.text_to_send = slot.generated_text.substr(std::min(slot.n_sent_text, slot.generated_text.size()));
+            slot.n_sent_text = slot.generated_text.size();
+            slot.add_token(result);
+            if (slot.task->params.stream) {
+                send_partial_response(slot, result, false);
+            }
         }
 
         SLT_DBG(slot, "n_gen = %d, n_remaining = %d, next token: %5d '%s'\n", (int) slot.stats.n_gen, slot.n_remaining(), result.tok, token_str.c_str());
