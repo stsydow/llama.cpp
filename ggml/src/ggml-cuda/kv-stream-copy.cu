@@ -1,4 +1,4 @@
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+#if !defined(GGML_USE_MUSA)
 #include "kv-stream-partial.cuh"
 #include "common.cuh"
 #include "../ggml-backend-impl.h"
@@ -130,10 +130,10 @@ static bool measure(void * handle, bool enable) {
             auto m = std::make_unique<measurement>(slots);
             // Lazy kernel loading can synchronize the context. Resolve kernels before any producer/consumer gate.
             cudaFuncAttributes attributes;
-            if (cudaFuncGetAttributes(&attributes,publish_ready) != cudaSuccess ||
-                    cudaFuncGetAttributes(&attributes,sample_deadline) != cudaSuccess ||
-                    cudaFuncGetAttributes(&attributes,sample_layer_range) != cudaSuccess ||
-                    cudaFuncGetAttributes(&attributes,finish_layer_sample) != cudaSuccess) {
+            if (cudaFuncGetAttributes(&attributes,(const void *) publish_ready) != cudaSuccess ||
+                    cudaFuncGetAttributes(&attributes,(const void *) sample_deadline) != cudaSuccess ||
+                    cudaFuncGetAttributes(&attributes,(const void *) sample_layer_range) != cudaSuccess ||
+                    cudaFuncGetAttributes(&attributes,(const void *) finish_layer_sample) != cudaSuccess) {
                 (void) cudaGetLastError(); return false;
             }
             m->buffer = ggml_backend_buft_alloc_buffer(ggml_backend_cuda_device_buffer_type(q.context->device),
@@ -184,9 +184,13 @@ static void * create(ggml_backend_t backend, ggml_backend_buffer_t device, ggml_
     ggml_cuda_set_device(ctx->device);
     cudaPointerAttributes attributes = {};
     if (cudaPointerGetAttributes(&attributes,ggml_backend_buffer_get_base(host)) != cudaSuccess) {
+        GGML_LOG_ERROR("%s: pointer attributes failed for the KV host buffer: %s\n", __func__, cudaGetErrorString(cudaGetLastError()));
         (void) cudaGetLastError(); return nullptr;
     }
-    if (attributes.type != cudaMemoryTypeHost) return nullptr;
+    if (attributes.type != cudaMemoryTypeHost) {
+        GGML_LOG_ERROR("%s: KV host buffer is not host memory (type %d)\n", __func__, int(attributes.type));
+        return nullptr;
+    }
     try {
         auto q = std::make_unique<copy_queue>(ctx,slots);
         q->page = page; q->ring = ring;

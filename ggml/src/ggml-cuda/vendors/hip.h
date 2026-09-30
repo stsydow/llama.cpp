@@ -76,8 +76,15 @@
 #define cudaHostAlloc hipHostMalloc
 #define cudaHostAllocPortable hipHostMallocPortable
 #define cudaHostAllocMapped hipHostMallocMapped
+#define cudaHostAllocWriteCombined hipHostMallocWriteCombined
+#define cudaHostGetFlags hipHostGetFlags
 #define cudaHostGetDevicePointer hipHostGetDevicePointer
+#define cudaEventCreate hipEventCreate
+#define cudaEventQuery hipEventQuery
+#define cudaEventElapsedTime hipEventElapsedTime
+#define cudaErrorNotReady hipErrorNotReady
 #define cudaHostRegister hipHostRegister
+#define cudaHostRegisterMapped hipHostRegisterMapped
 #define cudaHostRegisterPortable hipHostRegisterPortable
 #define cudaHostRegisterReadOnly hipHostRegisterReadOnly
 #define cudaHostUnregister hipHostUnregister
@@ -87,6 +94,27 @@
 #define cudaMallocHost(ptr, size) hipHostMalloc(ptr, size, hipHostMallocDefault)
 #define cudaMallocManaged hipMallocManaged
 #define cudaMemAdvise hipMemAdvise
+#define cudaFuncGetAttributes hipFuncGetAttributes
+#define cudaFuncAttributes hipFuncAttributes
+#define cudaPointerGetAttributes hipPointerGetAttributes
+// HIP 7 merged the attribute enum and the descriptor struct into one type.
+#if HIP_VERSION_MAJOR >= 7
+#define cudaPointerAttributes hipPointerAttribute_t
+#else
+#define cudaPointerAttributes hipPointerAttributes
+#endif
+#define cudaMemoryTypeHost hipMemoryTypeHost
+#define cudaSetDeviceFlags hipSetDeviceFlags
+#define cudaDeviceScheduleSpin hipDeviceScheduleSpin
+#define cudaStreamCaptureStatus hipStreamCaptureStatus
+#define cudaStreamCaptureStatusNone hipStreamCaptureStatusNone
+#define cudaStreamIsCapturing hipStreamIsCapturing
+#define cudaLaunchKernelEx hipLaunchKernelEx
+#define cudaLaunchConfig_t hipLaunchConfig_t
+#define cudaLaunchAttribute hipLaunchAttribute
+#define cudaGridDependencySynchronize hipGridDependencySynchronize
+#define cudaTriggerProgrammaticLaunchCompletion hipTriggerProgrammaticLaunchCompletion
+#define cudaLaunchAttributeProgrammaticStreamSerialization hipLaunchAttributeProgrammaticStreamSerialization
 #define cudaMemcpy hipMemcpy
 #define cudaMemcpyAsync hipMemcpyAsync
 #define cudaMemcpyPeerAsync hipMemcpyPeerAsync

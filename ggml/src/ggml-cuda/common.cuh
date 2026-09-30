@@ -365,6 +365,12 @@ static bool turing_mma_available(const int cc) {
     return GGML_CUDA_CC_IS_NVIDIA(cc) && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_TURING;
 }
 
+// Host-side mirror of the device-side AMD_WMMA_AVAILABLE gate, which cannot be
+// tested from host code. RDNA3 is the documented minimum for WMMA.
+static bool rocm_wmma_available(const int cc) {
+    return GGML_CUDA_CC_IS_AMD(cc) && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_RDNA3;
+}
+
 static bool ampere_mma_available(const int cc) {
     return GGML_CUDA_CC_IS_NVIDIA(cc) && ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_AMPERE;
 }

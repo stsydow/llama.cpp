@@ -581,7 +581,9 @@ static bool mma_span_launch_make(
     const int ncols1 = ggml_cuda_kv_stream_mma_ncols1(uint32_t(q->ne[1]),gqa_ratio);
     const int ncols2 = gqa_ratio > 4 ? 8 : 2, ncols = ncols1*ncols2;
     const int cc = ggml_cuda_info().devices[ctx.device].cc;
-    if (!turing_mma_available(cc)) {
+    // spans only: the K-V span kernels are gated separately from stock attention,
+    // which keeps its own turing-only selection untouched
+    if (!turing_mma_available(cc) && !rocm_wmma_available(cc)) {
         if (failure) *failure = status::unsupported_device_features;
         return false;
     }
@@ -939,9 +941,13 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
         if (can_use_vector_kernel) {
             if (!ggml_is_quantized(K->type) && !ggml_is_quantized(V->type)) {
                 // the sparse gather exists only in the MMA kernel: (DKQ, DV, 1, 8) with GQA > 4
+#if defined(GGML_USE_HIP) || defined(GGML_USE_MUSA)
+                const bool sparse_decode = false;
+#else
                 const bool sparse_decode = gqa_opt_applies && gqa_ratio > 4 &&
                     ggml_cuda_flash_attn_ext_mma_f16_may_use_sparse(K->ne[0], V->ne[0], 1, 8) &&
                     ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(cc, dst, 1, 8);
+#endif
                 if (!sparse_decode && cc >= GGML_CUDA_CC_ADA_LOVELACE && Q->ne[1] == 1 && Q->ne[3] == 1 &&
                         !(gqa_ratio > 4 && (Q->ne[0] >= 256 || K->ne[1] >= 8192))) {
                     return BEST_FATTN_KERNEL_VEC;

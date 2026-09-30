@@ -1,4 +1,4 @@
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+#if !defined(GGML_USE_MUSA)
 #include "kv-stream-partial.cuh"
 #include "kv-stream-dispatch.cuh"
 #include "kv-stream-attention-dispatch.h"
@@ -958,15 +958,25 @@ static bool spans(
 
 // The surrounding attention TU uses fast math; preserve subnormal contract payloads across conversion.
 static __device__ __forceinline__ double widen(float value) {
+#if defined(GGML_USE_HIP)
+    volatile const float v = value;
+    return (double) v;
+#else
     double result;
     asm("cvt.f64.f32 %0, %1;" : "=d"(result) : "f"(value));
     return result;
+#endif
 }
 // Explicit rounding also prevents fast-math publication from flushing a valid FP32 accumulator to zero.
 static __device__ __forceinline__ float narrow(double value) {
+#if defined(GGML_USE_HIP)
+    volatile const double v = value;
+    return (float) v;
+#else
     float result;
     asm("cvt.rn.f32.f64 %0, %1;" : "=f"(result) : "d"(value));
     return result;
+#endif
 }
 
 // Validate all four contributions and fold or stage normalized values; never write public output here.

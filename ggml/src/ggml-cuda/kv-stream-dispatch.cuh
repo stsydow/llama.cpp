@@ -2,7 +2,7 @@
 #include "fattn-common.cuh"
 #include "kv-stream-span.h"
 
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+#if !defined(GGML_USE_MUSA)
 
 using ggml_kv_vector_span_kernel_t = void (*)(
         const char * Q_ptr, const char * K_ptr, const char * V_ptr, const char * mask_ptr,

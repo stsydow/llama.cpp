@@ -1392,7 +1392,7 @@ ggml_backend_buffer_type_t ggml_backend_cuda_host_buffer_type() {
 
 
 // Strict mutable KV backing. Unlike the generic host type, pinning failure is not a pageable fallback.
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+#if !defined(GGML_USE_MUSA)
 struct ggml_cuda_kv_host_context {
     enum ownership { borrowed, allocated, registered } ownership = borrowed;
     void * data = nullptr;
@@ -1447,11 +1447,19 @@ static ggml_backend_buffer_t ggml_backend_cuda_kv_host_view(
 
 // Validate mapping before handing out storage that later kernels may address.
 static bool ggml_backend_cuda_kv_host_mapped(void * data) {
+#if defined(GGML_USE_HIP)
+    // Zero-copy host mapping is a CUDA contract and is not available on every
+    // AMDGPU target. The streamed path moves KV with explicit async copies, so
+    // it only needs the allocation pinned.
+    GGML_UNUSED(data);
+    return true;
+#else
     void * device_pointer = nullptr;
     const auto error = cudaHostGetDevicePointer(&device_pointer, data, 0);
     if (error == cudaSuccess) return device_pointer != nullptr;
     (void) cudaGetLastError();
     return false;
+#endif
 }
 
 // Preserve the reference WDDM workaround: mapped, but never write-combined on native Windows.
@@ -6173,7 +6181,7 @@ static ggml_backend_feature * ggml_backend_cuda_get_features(ggml_backend_reg_t 
     GGML_UNUSED(reg);
 }
 
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
+#if !defined(GGML_USE_MUSA)
 // Available even when GGML's automatic graph cache is disabled.
 static bool ggml_backend_cuda_graph_is_capturing(ggml_backend_t backend) {
     GGML_ASSERT(backend && ggml_backend_is_cuda(backend));
@@ -6224,13 +6232,15 @@ static bool ggml_backend_cuda_graph_is_captured(ggml_backend_t backend, const vo
 
 static void * ggml_backend_cuda_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
     GGML_UNUSED(reg);
-#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
-    if (strcmp(name,"ggml_backend_cuda_graph_is_capturing") == 0) return (void *)ggml_backend_cuda_graph_is_capturing;
+#if !defined(GGML_USE_MUSA)
     if (strcmp(name, "ggml_backend_kv_stream_partial_ops") == 0) return (void *)ggml_cuda_kv_stream_partial_ops;
     if (strcmp(name, "ggml_backend_cuda_kv_stream_attention_plan") == 0) return (void *)ggml_cuda_kv_stream_attention_plan_query;
     if (strcmp(name, "ggml_backend_kv_stream_copy_ops") == 0) return (void *)ggml_cuda_kv_stream_copy_ops;
     if (strcmp(name, "ggml_backend_cuda_kv_host_buffer_type") == 0) return (void *)ggml_backend_cuda_kv_host_buffer_type;
     if (strcmp(name, "ggml_backend_cuda_kv_host_buffer_register") == 0) return (void *)ggml_backend_cuda_kv_host_buffer_register;
+#endif
+#if !defined(GGML_USE_MUSA)
+    if (strcmp(name,"ggml_backend_cuda_graph_is_capturing") == 0) return (void *)ggml_backend_cuda_graph_is_capturing;
     const bool release_graph = strcmp(name, "ggml_backend_cuda_graph_release") == 0;
     const bool release_all = strcmp(name, "ggml_backend_cuda_graph_release_all") == 0;
     if (release_graph || release_all || strcmp(name, "ggml_backend_cuda_graph_is_captured") == 0) {
