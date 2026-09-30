@@ -151,7 +151,7 @@ static std::vector<float> ordinary(fixture & f, block_inputs & input, uint32_t l
     auto * value = ggml_view_3d(ctx.get(), v, 256, input.padded, 2,
         ggml_row_size(v->type, 512), ggml_row_size(v->type, 256), 0);
     auto * out = ggml_flash_attn_ext(ctx.get(), input.q, key, value, input.mask, 1.0f/16, 0, 0);
-    ggml_flash_attn_ext_set_prec(out, GGML_PREC_F32);
+    ggml_prec_set_acc(out, GGML_PREC_F32);
     auto * graph = ggml_new_graph_custom(ctx.get(), 64, false);
     ggml_build_forward_expand(graph, out);
     ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), f.backend));
@@ -212,7 +212,7 @@ struct stock_attention_case {
         v = ggml_view_3d(context.get(), v_storage, 256, input.padded, 2,
             ggml_row_size(v_storage->type, 512), ggml_row_size(v_storage->type, 256), 0);
         auto * output = ggml_flash_attn_ext(context.get(), input.q, k, v, input.mask, 1.0f/16, 0, 0);
-        ggml_flash_attn_ext_set_prec(output, GGML_PREC_F32);
+        ggml_prec_set_acc(output, GGML_PREC_F32);
         graph = ggml_new_graph_custom(context.get(), 64, false);
         ggml_build_forward_expand(graph, output);
         buffer.reset(ggml_backend_alloc_ctx_tensors(context.get(), f.backend));
@@ -244,7 +244,7 @@ struct span_attention_case {
         auto * node = ggml_flash_attn_ext(
             context.get(),input.q,stock.k,stock.v,input.mask,1.0f/16,0,0);
         GGML_ASSERT(node);
-        ggml_flash_attn_ext_set_prec(node, GGML_PREC_F32);
+        ggml_prec_set_acc(node, GGML_PREC_F32);
         op = *node;
         op.buffer = input.output->buffer;
         op.data = input.output->data;
@@ -1105,7 +1105,7 @@ int main(int argc, char ** argv) {
         ggml_context_ptr ctx(ggml_init({65536,nullptr,true}));
         auto * node = ggml_flash_attn_ext(ctx.get(),input.q,stock.k,stock.v,input.mask,1.0f/16,0,0);
         if (!t.assert_true(node != nullptr)) return;
-        ggml_flash_attn_ext_set_prec(node,GGML_PREC_F32);
+        ggml_prec_set_acc(node,GGML_PREC_F32);
         ggml_tensor op = *node;
         op.buffer = input.output->buffer;
         op.data = input.output->data;

@@ -143,13 +143,27 @@ struct llama_kv_stream_model::implementation {
         leases[2].reset(); attention_arena.reset();
         auto * type = llama_kv_stream_device_buffer_type(ggml_backend_get_device(config.backend));
         attention_arena.reset(ggml_backend_memory_arena_new(type,bytes));
-        if (!attention_arena || !ggml_backend_memory_arena_begin(attention_arena.get(),0) ||
-                !ggml_backend_memory_arena_reserve_at(attention_arena.get(),config.host.cache_id*4+3,0,bytes,128,0,nullptr) ||
-                !ggml_backend_memory_arena_commit(attention_arena.get())) { attention_arena.reset(); return false; }
+        const char * why = "arena begin";
+        if (!attention_arena || !ggml_backend_memory_arena_begin(attention_arena.get(),0)) { attention_arena.reset(); goto attention_failed; }
+        why = "arena reserve";
+        if (!ggml_backend_memory_arena_reserve_at(attention_arena.get(),config.host.cache_id*4+3,0,bytes,128,0,nullptr)) { attention_arena.reset(); goto attention_failed; }
+        why = "arena commit";
+        if (!ggml_backend_memory_arena_commit(attention_arena.get())) { attention_arena.reset(); goto attention_failed; }
+        why = "lease acquire";
         leases[2].reset(ggml_backend_memory_arena_acquire(attention_arena.get(),config.host.cache_id*4+3));
-        if (!leases[2] || (session && !session->set_attention_workspace(leases[2].get(),decode))) {
-            leases[2].reset(); attention_arena.reset(); return false;
+        if (!leases[2]) goto attention_failed;
+        why = "set_attention_workspace";
+        if (session && !session->set_attention_workspace(leases[2].get(),decode)) { leases[2].reset(); attention_arena.reset(); goto attention_failed; }
+        goto attention_done;
+attention_failed:
+        {
+            size_t vfree = 0, vtotal = 0;
+            ggml_backend_dev_memory(ggml_backend_get_device(config.backend), &vfree, &vtotal);
+            LLAMA_LOG_ERROR("%s: %s failed for %.2f MiB (VRAM %.2f/%.2f MiB free, pool %.2f MiB)\n",
+                __func__, why, bytes/1048576.0, vfree/1048576.0, vtotal/1048576.0, config.pool_bytes/1048576.0);
         }
+        return false;
+attention_done:;
         if (previous) LLAMA_LOG_INFO("%s: KV attention workspace %.2f -> %.2f MiB (%s)\n",__func__,
             previous/1048576.0,bytes/1048576.0,decode ? "resumed decode" : "strict prefill");
         return true;
@@ -164,9 +178,11 @@ struct llama_kv_stream_model::implementation {
     }
 
     bool allocate_private() {
-        if (session || arena || attention_arena || leases[0] || leases[1] || leases[2]) return false;
+        const char * stage = "already allocated";
+        if (session || arena || attention_arena || leases[0] || leases[1] || leases[2]) return (LLAMA_LOG_ERROR("%s: %s\n", __func__, stage), false);
         auto * type = llama_kv_stream_device_buffer_type(ggml_backend_get_device(config.backend));
-        if (!type) return false;
+        stage = "no device buffer type";
+        if (!type) return (LLAMA_LOG_ERROR("%s: %s\n", __func__, stage), false);
         pool_resource = writer_resource = attention_resource = 0;
         prefill_stage = decode_stage = suspend_stage = 0;
         shared_parent = nullptr;
@@ -181,10 +197,13 @@ struct llama_kv_stream_model::implementation {
             total = offsets[i]+sizes[i];
         }
         arena.reset(ggml_backend_memory_arena_new(type,total));
+        stage = "arena begin";
         if (!arena || !ggml_backend_memory_arena_begin(arena.get(),0)) {
+            LLAMA_LOG_ERROR("%s: %s (pool %zu MiB, total %zu MiB)\n", __func__, stage, config.pool_bytes/1048576, total/1048576);
             release_device_memory();
             return false;
         }
+        stage = "arena reserve";
         for (size_t i = 0; i < sizes.size(); ++i) {
             if (!ggml_backend_memory_arena_reserve_at(
                     arena.get(),config.host.cache_id*4+i+1,offsets[i],sizes[i],128,0,nullptr)) {
@@ -192,10 +211,13 @@ struct llama_kv_stream_model::implementation {
                 return false;
             }
         }
+        stage = "arena commit";
         if (!ggml_backend_memory_arena_commit(arena.get())) {
+            LLAMA_LOG_ERROR("%s: %s (pool %zu MiB)\n", __func__, stage, config.pool_bytes/1048576);
             release_device_memory();
             return false;
         }
+        stage = "lease acquire";
         for (size_t i = 0; i < sizes.size(); ++i) {
             leases[i].reset(ggml_backend_memory_arena_acquire(
                 arena.get(),config.host.cache_id*4+i+1));
@@ -204,7 +226,13 @@ struct llama_kv_stream_model::implementation {
                 return false;
             }
         }
-        if (!resize_attention(host->layout().bytes,false) || !make_session()) {
+        if (!resize_attention(host->layout().bytes,false)) {
+            LLAMA_LOG_ERROR("%s: resize_attention failed (host layout %.2f MiB, pool %.2f MiB)\n", __func__, host->layout().bytes/1048576.0, config.pool_bytes/1048576.0);
+            release_device_memory();
+            return false;
+        }
+        if (!make_session()) {
+            LLAMA_LOG_ERROR("%s: make_session failed\n", __func__);
             release_device_memory();
             return false;
         }
@@ -370,7 +398,10 @@ std::unique_ptr<llama_kv_stream_model> llama_kv_stream_model::create(const llama
     auto * dev = ggml_backend_get_device(config.backend);
     auto * type = llama_kv_stream_device_buffer_type(dev);
     auto * host_type = llama_kv_stream_host_buffer_type(dev);
-    if (!type || !host_type) return {};
+    if (!type || !host_type) {
+        LLAMA_LOG_ERROR("%s: KV streaming buffer types unavailable (device %p host %p)\n", __func__, (void *) type, (void *) host_type);
+        return {};
+    }
     uint32_t unavailable = 0;
     if (!native_attention_available(config,unavailable)) {
         if (unavailable_queries) *unavailable_queries = unavailable;
@@ -394,7 +425,10 @@ std::unique_ptr<llama_kv_stream_model> llama_kv_stream_model::create(const llama
         };
         llama_kv_stream_policy_state initial;
         if (llama_kv_stream_policy_initialize(s->physical_policy, initial).status !=
-                llama_kv_stream_policy_status::success) return {};
+                llama_kv_stream_policy_status::success) {
+            LLAMA_LOG_ERROR("%s: policy initialize failed (pool %zu MiB)\n", __func__, config.pool_bytes/1048576);
+            return {};
+        }
         s->host = llama_kv_stream_host::create(s->config.host,host_type);
         if (!s->host) { LLAMA_LOG_ERROR("%s: authoritative host KV allocation/registration failed\n",__func__); return {}; }
         s->content = std::make_shared<llama_kv_stream_content>(s->host);
@@ -460,7 +494,10 @@ std::unique_ptr<llama_kv_stream_model> llama_kv_stream_model::create(const llama
         std::unique_ptr<llama_kv_stream_model> result(new llama_kv_stream_model);
         result->impl = s;
         result->proxy = ggml_backend_execution_buffer_new(dev,s->host->buffer(),ops,owner.get());
-        if (!result->proxy) return {};
+        if (!result->proxy) {
+            LLAMA_LOG_ERROR("%s: execution buffer failed\n", __func__);
+            return {};
+        }
         owner.release(); return result;
     } catch (const std::bad_alloc &) { LLAMA_LOG_ERROR("%s: host KV metadata allocation failed\n",__func__); return {}; }
 }

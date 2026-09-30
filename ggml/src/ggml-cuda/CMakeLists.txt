@@ -130,9 +130,11 @@ if (CUDAToolkit_FOUND)
     list(APPEND GGML_SOURCES_CUDA ${SRCS})
 
     # Compile private head-256 streamed kernels without changing stock attention dispatch.
+    # Which K-V pairs a key type can serve is decided per pair in the template, from
+    # the GGML_CUDA_FA_<K>_<V> macros that ggml_cuda_fattn_vec_instances already emits.
     foreach(KV_STREAM_KEY IN ITEMS F16 BF16 Q4_0 Q4_1 Q5_0 Q5_1 Q8_0)
         set(KV_STREAM_DEFAULT_NATIVE 0)
-        if (KV_STREAM_KEY MATCHES "^(F16|BF16|Q4_0|Q8_0)$")
+        if (KV_STREAM_KEY MATCHES "^(F16|BF16|Q4_0|Q4_1|Q5_0|Q5_1|Q8_0)$")
             set(KV_STREAM_DEFAULT_NATIVE 1)
         endif()
         set(KV_STREAM_INSTANCE "${CMAKE_CURRENT_BINARY_DIR}/kv-stream-instance-${KV_STREAM_KEY}.cu")

@@ -153,16 +153,28 @@ struct llama_kv_stream_session::implementation : llama_memory_executor_backend {
             ggml_backend_memory_lease_t writer,
             ggml_backend_memory_lease_t attention,
             uint64_t previous_revision, pool_candidate & output) {
-        if (previous_revision == UINT64_MAX || !pool || !writer || !attention) return false;
+        if (previous_revision == UINT64_MAX || !pool || !writer || !attention) {
+            LLAMA_LOG_ERROR("%s: grants missing (rev %llu)\n", __func__, (unsigned long long) previous_revision);
+            return false;
+        }
         const std::array<ggml_backend_memory_lease_t,3> grants{pool,writer,attention};
         pool_candidate next;
         for (size_t i = 0; i < grants.size(); ++i) {
             auto * buffer = ggml_backend_memory_lease_buffer(grants[i]);
-            if (!buffer) return false;
+            if (!buffer) {
+                LLAMA_LOG_ERROR("%s: grant %zu has no buffer\n", __func__, i);
+                return false;
+            }
             next.leases[i].reset(ggml_backend_memory_lease_retain(grants[i]));
-            if (!next.leases[i]) return false;
+            if (!next.leases[i]) {
+                LLAMA_LOG_ERROR("%s: grant %zu retain failed\n", __func__, i);
+                return false;
+            }
             const size_t bytes = ggml_backend_buffer_get_size(buffer);
-            if (bytes > SIZE_MAX-next.grant) return false;
+            if (bytes > SIZE_MAX-next.grant) {
+                LLAMA_LOG_ERROR("%s: grant %zu size overflow\n", __func__, i);
+                return false;
+            }
             next.grant += bytes;
         }
         auto * buffer = ggml_backend_memory_lease_buffer(pool);
@@ -171,10 +183,26 @@ struct llama_kv_stream_session::implementation : llama_memory_executor_backend {
         if (!next.binding->bind(pool,policy,[&](const auto & view) {
             auto result = llama_kv_stream_resident::create(view,content,backend,&candidate);
             next.resident = result.get(); return result;
-        }) || !next.resident->configure_writes(config.max_batch_rows,next.leases[1].get()) ||
-                !next.resident->configure_feedback(config.measure) ||
-                !next.resident->configure_native_graph_attention(config.native_graph_attention) ||
-                !next.resident->configure_resumed_decode(config.resume_decode)) return false;
+        })) {
+            LLAMA_LOG_ERROR("%s: binding bind failed\n", __func__);
+            return false;
+        }
+        if (!next.resident->configure_writes(config.max_batch_rows,next.leases[1].get())) {
+            LLAMA_LOG_ERROR("%s: configure_writes failed\n", __func__);
+            return false;
+        }
+        if (!next.resident->configure_feedback(config.measure)) {
+            LLAMA_LOG_ERROR("%s: configure_feedback failed\n", __func__);
+            return false;
+        }
+        if (!next.resident->configure_native_graph_attention(config.native_graph_attention)) {
+            LLAMA_LOG_ERROR("%s: configure_native_graph_attention failed\n", __func__);
+            return false;
+        }
+        if (!next.resident->configure_resumed_decode(config.resume_decode)) {
+            LLAMA_LOG_ERROR("%s: configure_resumed_decode failed\n", __func__);
+            return false;
+        }
         next.policy = policy;
         next.state = candidate;
         output = std::move(next);
@@ -200,6 +228,7 @@ struct llama_kv_stream_session::implementation : llama_memory_executor_backend {
         if (!build_pool(candidate,policy,pool,leases[1].get(),leases[2].get(),revision,replacement)) return false;
         graphs.clear();
         if (binding && binding->detach(*this).status != llama_memory_executor_status::retired) {
+            LLAMA_LOG_ERROR("%s: detach did not retire\n", __func__);
             poisoned = true; return false;
         }
         publish_pool(std::move(replacement));
@@ -585,17 +614,38 @@ std::unique_ptr<llama_kv_stream_session> llama_kv_stream_session::create(ggml_ba
             (coordinated_scratch && (!config.writer_resource || !config.attention_resource ||
                 config.writer_resource == config.pool_resource ||
                 config.attention_resource == config.pool_resource ||
-                config.writer_resource == config.attention_resource)))) return {};
+                config.writer_resource == config.attention_resource)))) {
+        LLAMA_LOG_ERROR("%s: transition config inconsistent\n", __func__);
+        return {};
+    }
     if (!backend || !content || !config.max_batch_rows || config.max_batch_rows > INT32_MAX || !config.query_heads ||
             config.query_heads > SIZE_MAX/config.max_batch_rows || config.policy.shape.head_dim_k != 256 ||
             config.policy.shape.head_dim_v != 256 || config.policy.shape.heads <= 0 ||
-            config.query_heads%config.policy.shape.heads) return {};
+            config.query_heads%config.policy.shape.heads) {
+        LLAMA_LOG_ERROR("%s: session config invalid (rows %d, heads %d)\n", __func__, config.max_batch_rows, config.query_heads);
+        return {};
+    }
     auto * type = llama_kv_stream_device_buffer_type(ggml_backend_get_device(backend));
-    if (!type || ggml_backend_buffer_get_type(content->host()->buffer()) != llama_kv_stream_host_buffer_type(ggml_backend_get_device(backend))) return {};
+    auto * want_host = llama_kv_stream_host_buffer_type(ggml_backend_get_device(backend));
+    if (!type || !want_host) {
+        LLAMA_LOG_ERROR("%s: buffer types unavailable\n", __func__);
+        return {};
+    }
+    if (ggml_backend_buffer_get_type(content->host()->buffer()) != want_host) {
+        LLAMA_LOG_ERROR("%s: host buffer type mismatch (have %p want %p)\n", __func__,
+            (void *) ggml_backend_buffer_get_type(content->host()->buffer()), (void *) want_host);
+        return {};
+    }
     llama_kv_stream_policy_state state;
-    if (llama_kv_stream_policy_initialize(config.policy,state).status != llama_kv_stream_policy_status::success) return {};
+    if (llama_kv_stream_policy_initialize(config.policy,state).status != llama_kv_stream_policy_status::success) {
+        LLAMA_LOG_ERROR("%s: policy initialize failed\n", __func__);
+        return {};
+    }
     ggml_kv_stream_block_layout work;
-    if (ggml_kv_stream_block_layout_make(size_t(config.query_heads)*config.max_batch_rows,256,work).status != ggml_kv_stream_partial_status::success) return {};
+    if (ggml_kv_stream_block_layout_make(size_t(config.query_heads)*config.max_batch_rows,256,work).status != ggml_kv_stream_partial_status::success) {
+        LLAMA_LOG_ERROR("%s: block layout failed\n", __func__);
+        return {};
+    }
     const std::array<ggml_backend_memory_lease_t,3> grants{pool,writer,partial};
     std::array<ggml_backend_memory_region,3> regions{};
     std::array<uintptr_t,3> addresses{};
@@ -603,18 +653,34 @@ std::unique_ptr<llama_kv_stream_session> llama_kv_stream_session::create(ggml_ba
     for (size_t i = 0; i < grants.size(); ++i) {
         auto * buffer = ggml_backend_memory_lease_buffer(grants[i]);
         if (!buffer || !ggml_backend_memory_lease_get_region(grants[i],&regions[i]) || !regions[i].id || !regions[i].size ||
-                ggml_backend_buffer_get_type(buffer) != type || ggml_backend_buffer_get_size(buffer) != regions[i].size) return {};
+                ggml_backend_buffer_get_type(buffer) != type || ggml_backend_buffer_get_size(buffer) != regions[i].size) {
+            LLAMA_LOG_ERROR("%s: grant %zu invalid (region %zu MiB, buffer %zu MiB, type %s)\n", __func__, i,
+                regions[i].size/1048576, ggml_backend_buffer_get_size(buffer)/1048576,
+                ggml_backend_buffer_get_type(buffer) == type ? "device" : "other");
+            return {};
+        }
         addresses[i] = uintptr_t(ggml_backend_buffer_get_base(buffer));
-        if (!addresses[i] || addresses[i]%128 || addresses[i] > UINTPTR_MAX-regions[i].size || regions[i].size > SIZE_MAX-total) return {};
+        if (!addresses[i] || addresses[i]%128 || addresses[i] > UINTPTR_MAX-regions[i].size || regions[i].size > SIZE_MAX-total) {
+            LLAMA_LOG_ERROR("%s: grant %zu address invalid (%p)\n", __func__, i, (void *) addresses[i]);
+            return {};
+        }
         total += regions[i].size;
         for (size_t j = 0; j < i; ++j) if (regions[i].id == regions[j].id ||
                 (addresses[i] < addresses[j]+regions[j].size && addresses[j] < addresses[i]+regions[i].size)) return {};
     }
     size_t partial_bytes = config.native_graph_attention ? content->host()->layout().bytes : work.bytes;
     if (config.initial_decode && config.resume_decode) {
-        if (!decode_workspace_bytes(backend,config,content->host()->layout().tokens,partial_bytes)) return {};
+        if (!decode_workspace_bytes(backend,config,content->host()->layout().tokens,partial_bytes)) {
+            LLAMA_LOG_ERROR("%s: decode workspace sizing failed\n", __func__);
+            return {};
+        }
     }
-    if (regions[0].size < config.policy.pool_bytes || regions[2].size < partial_bytes) return {};
+    if (regions[0].size < config.policy.pool_bytes || regions[2].size < partial_bytes) {
+        LLAMA_LOG_ERROR("%s: region too small (pool %zu/%zu MiB, partial %zu/%zu MiB)\n", __func__,
+            regions[0].size/1048576, config.policy.pool_bytes/1048576,
+            regions[2].size/1048576, partial_bytes/1048576);
+        return {};
+    }
     try {
         std::unique_ptr<llama_kv_stream_session> result(new llama_kv_stream_session);
         result->impl = std::make_unique<implementation>(); auto & s = *result->impl;
@@ -622,9 +688,15 @@ std::unique_ptr<llama_kv_stream_session> llama_kv_stream_session::create(ggml_ba
         for (size_t i = 0; i < grants.size(); ++i) s.leases[i].reset(ggml_backend_memory_lease_retain(grants[i]));
         s.order.resize(s.content->host()->config().layers); std::iota(s.order.begin(),s.order.end(),0);
         s.expected_generation = s.content->generation();
-        if (!s.install(state)) return {};
+        if (!s.install(state)) {
+            LLAMA_LOG_ERROR("%s: install failed\n", __func__);
+            return {};
+        }
         s.publications = llama_kv_stream_publications::create({0,s.content->host()->config().context_tokens,s.expected_generation,1});
-        if (!s.publications) return {};
+        if (!s.publications) {
+            LLAMA_LOG_ERROR("%s: publications failed\n", __func__);
+            return {};
+        }
         return result;
     } catch (const std::bad_alloc &) { return {}; }
 }

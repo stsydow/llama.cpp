@@ -126,3 +126,13 @@ GGML_API void ggml_kv_stream_span_plan_free(ggml_kv_stream_span_plan_t plan);
 // Return a borrowed immutable view without transferring buffer ownership.
 GGML_API bool ggml_kv_stream_span_plan_get_view(
         ggml_kv_stream_span_plan_t plan, ggml_kv_stream_span_plan_view & output);
+
+// flash_attn_ext_f16_dequantize_8 static_asserts to Q8_0 or Q4_0, so the span tile
+// has no representation for any pair involving Q5_0, Q5_1, Q4_1 or BF16. Takes the
+// int32_t codes of ggml_kv_stream_shape so an unknown value avoids an enum load.
+static inline bool ggml_kv_stream_span_pair_supported(int32_t type_k, int32_t type_v) {
+    const auto supported = [](int32_t t) {
+        return t == GGML_TYPE_F16 || t == GGML_TYPE_Q8_0 || t == GGML_TYPE_Q4_0;
+    };
+    return supported(type_k) && supported(type_v);
+}

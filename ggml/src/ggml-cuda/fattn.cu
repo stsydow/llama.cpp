@@ -5,6 +5,7 @@
 #include "fattn-vec.cuh"
 #include "fattn.cuh"
 #include "kv-stream-attention-dispatch.h"
+#include "../ggml-kv-stream.h"
 
 #if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
 // one list per group of ncols1 queries: a column is selected if any query of the group can see it
@@ -553,8 +554,7 @@ static bool mma_span_launch_make(
     const auto * mask = dst->src[3];
     if (!q || !k || !v || !mask || dst->src[4] ||
             q->type != GGML_TYPE_F32 ||
-            !((k->type == GGML_TYPE_F16 && v->type == GGML_TYPE_F16) ||
-              (k->type == GGML_TYPE_Q8_0 && v->type == GGML_TYPE_Q4_0)) ||
+            !ggml_kv_stream_span_pair_supported(k->type, v->type) ||
             dst->type != GGML_TYPE_F32 || q->ne[0] != 256 || v->ne[0] != 256 ||
             k->ne[0] != 256 || (q->ne[1] != 2 && q->ne[1] != 3 && q->ne[1] != 4) ||
             k->ne[2] <= 0 || v->ne[2] != k->ne[2] || q->ne[2] <= 0 ||

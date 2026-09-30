@@ -631,13 +631,21 @@ static bool vector_spans_launch(
     auto & source_tail = fixed[count-1];
     const int tail_live = source_tail.tokens%128;
     if (tail_live) {
-        if (plan.bytes > SIZE_MAX-127 || source_tail.k_token_stride <= 0 || source_tail.v_token_stride <= 0) return false;
+        if (plan.bytes > SIZE_MAX-127 || source_tail.k_token_stride <= 0 || source_tail.v_token_stride <= 0) {
+            GGML_LOG_WARN("%s: span tail strides k=%lld v=%lld tokens=%d\n",
+                __func__, (long long) source_tail.k_token_stride, (long long) source_tail.v_token_stride, tail_live);
+            return false;
+        }
         const size_t tail_offset = (plan.bytes+127)/128*128;
         const size_t k_bytes = size_t(source_tail.k_token_stride)*128;
         const size_t v_bytes = size_t(source_tail.v_token_stride)*128;
         if (k_bytes > SIZE_MAX-127) return false;
         const size_t v_offset = (k_bytes+127)/128*128;
-        if (v_bytes > SIZE_MAX-v_offset || tail_offset > capacity || v_offset+v_bytes > capacity-tail_offset) return false;
+        if (v_bytes > SIZE_MAX-v_offset || tail_offset > capacity || v_offset+v_bytes > capacity-tail_offset) {
+            GGML_LOG_WARN("%s: span tail scratch short: need %zu+%zu, have %zu\n",
+                __func__, tail_offset, v_offset+v_bytes, capacity);
+            return false;
+        }
         const int prefix = source_tail.tokens-tail_live;
         ggml_cuda_kv_span padded = source_tail;
         padded.first += prefix;
@@ -664,10 +672,17 @@ static bool vector_spans_launch(
             logical_tokens[count-1] = tail_live;
         }
     }
-    if (fixed_count > 4 || plan.splits < fixed_count) return false;
+    if (fixed_count > 4 || plan.splits < fixed_count) {
+        GGML_LOG_WARN("%s: span count %zu exceeds splits %zu\n", __func__, fixed_count, size_t(plan.splits));
+        return false;
+    }
     auto kernel = ggml_cuda_kv_stream_vector_span_kernel(
         k->type,v->type,uint32_t(q->ne[1]),uint32_t(fixed_count));
-    if (!kernel) return false;
+    if (!kernel) {
+        GGML_LOG_WARN("%s: no span kernel for K=%s V=%s queries=%d spans=%zu\n",
+            __func__, ggml_type_name(k->type), ggml_type_name(v->type), int(q->ne[1]), fixed_count);
+        return false;
+    }
     auto * device_spans = reinterpret_cast<ggml_cuda_kv_span *>(base);
     CUDA_CHECK(cudaMemcpyAsync(
         device_spans,fixed,fixed_count*sizeof(*fixed),cudaMemcpyHostToDevice,ctx.stream()));

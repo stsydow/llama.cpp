@@ -714,7 +714,7 @@ ggml_tensor * llama_kv_stream_resident::attention(ggml_context * context, uint32
     }
     prototype.src[0] = q; prototype.src[1] = &k; prototype.src[2] = &v; prototype.src[3] = mask;
     std::memcpy(prototype.op_params, &scale, sizeof(scale));
-    ggml_flash_attn_ext_set_prec(&prototype, GGML_PREC_F32);
+    ggml_prec_set_acc(&prototype, GGML_PREC_F32);
     const auto & shape = s.binding.config.shape;
     const ggml_kv_stream_attention_limits limits{shape.head_dim_k, shape.head_dim_v, 256, shape.page_tokens, shape.alignment};
     ggml_kv_stream_execution execution;
@@ -725,7 +725,7 @@ ggml_tensor * llama_kv_stream_resident::attention(ggml_context * context, uint32
     auto * vt = ggml_view_4d(context, s.roots[layer].second, v.ne[0], v.ne[1], v.ne[2], 1, v.nb[1], v.nb[2], v.nb[3], 0);
     if (ggml_backend_view_init(kt) != GGML_STATUS_SUCCESS || ggml_backend_view_init(vt) != GGML_STATUS_SUCCESS) return nullptr;
     auto * out = ggml_flash_attn_ext(context, q, kt, vt, mask, scale, 0, 0);
-    ggml_flash_attn_ext_set_prec(out, GGML_PREC_F32);
+    ggml_prec_set_acc(out, GGML_PREC_F32);
     return out;
 }
 
@@ -1110,7 +1110,7 @@ bool llama_kv_stream_resident::compute_streamed(uint32_t layer, ggml_tensor * q,
         slice.data = reinterpret_cast<void *>(uintptr_t(mask->data)+first*sizeof(ggml_fp16_t));
         op = *output; op.op = GGML_OP_FLASH_ATTN_EXT;
         std::memset(op.src,0,sizeof(op.src)); std::memset(op.op_params,0,sizeof(op.op_params));
-        std::memcpy(op.op_params,&scale,sizeof(scale)); ggml_flash_attn_ext_set_prec(&op,GGML_PREC_F32);
+        std::memcpy(op.op_params,&scale,sizeof(scale)); ggml_prec_set_acc(&op,GGML_PREC_F32);
         ggml_backend_execution_set_external_workspace(&op, ggml_backend_execution_has_external_workspace(output));
         op.src[0] = q; op.src[1] = s.fallback ? &ck : &k; op.src[2] = s.fallback ? &cv : &v; op.src[3] = &slice;
         return ops->supports(s.backend,&op);
@@ -1288,7 +1288,7 @@ bool llama_kv_stream_resident::compute_streamed(uint32_t layer, ggml_tensor * q,
         slice=*mask; slice.ne[0]=int64_t(padded);
         op=*output; op.op=GGML_OP_FLASH_ATTN_EXT;
         std::memset(op.src,0,sizeof(op.src)); std::memset(op.op_params,0,sizeof(op.op_params));
-        std::memcpy(op.op_params,&scale,sizeof(scale)); ggml_flash_attn_ext_set_prec(&op,GGML_PREC_F32);
+        std::memcpy(op.op_params,&scale,sizeof(scale)); ggml_prec_set_acc(&op,GGML_PREC_F32);
         ggml_backend_execution_set_external_workspace(&op, ggml_backend_execution_has_external_workspace(output));
         op.src[0]=q; op.src[1]=&k; op.src[2]=&v; op.src[3]=&slice;
         ggml_kv_stream_span_plan_t raw=nullptr;
@@ -1343,7 +1343,7 @@ bool llama_kv_stream_resident::compute_streamed(uint32_t layer, ggml_tensor * q,
         slice = *mask; slice.ne[0] = int64_t(padded);
         op = *output; op.op = GGML_OP_FLASH_ATTN_EXT;
         std::memset(op.src,0,sizeof(op.src)); std::memset(op.op_params,0,sizeof(op.op_params));
-        std::memcpy(op.op_params,&scale,sizeof(scale)); ggml_flash_attn_ext_set_prec(&op,GGML_PREC_F32);
+        std::memcpy(op.op_params,&scale,sizeof(scale)); ggml_prec_set_acc(&op,GGML_PREC_F32);
         ggml_backend_execution_set_external_workspace(&op, ggml_backend_execution_has_external_workspace(output));
         op.src[0] = q; op.src[1] = &k; op.src[2] = &v; op.src[3] = &slice;
         if (!ops->direct(s.backend,&op)) return false;
