@@ -1251,6 +1251,12 @@ size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_id) {
     return ggml_vbuffer_size(galloc->buffers[buffer_id]);
 }
 
+bool ggml_gallocr_buffer_is_external(ggml_gallocr_t galloc, int buffer_id) {
+    GGML_ASSERT(buffer_id >= 0 && buffer_id < galloc->n_buffers);
+
+    return galloc->buffer_external[buffer_id];
+}
+
 // Attach an aligned range to empty slots that share an allocator, then invalidate cached tensor placements.
 bool ggml_gallocr_set_buffer_range(
         ggml_gallocr_t galloc, int buffer_id, ggml_backend_buffer_t buffer, size_t offset, size_t size) {

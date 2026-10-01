@@ -84,6 +84,10 @@ GGML_API bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph
 
 GGML_API size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_id);
 
+// True when the buffer is a borrowed range supplied via ggml_gallocr_set_buffer_range.
+// get_buffer_size then reports the range, not a buffer this allocator owns.
+GGML_API bool ggml_gallocr_buffer_is_external(ggml_gallocr_t galloc, int buffer_id);
+
 // Galloc retains the buffer until it is freed.
 // Set the range after size measurement and before reserve.
 // Stateful buffers require a complete, independently resettable view.

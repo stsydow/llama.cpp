@@ -2271,6 +2271,16 @@ size_t ggml_backend_sched_get_buffer_size(ggml_backend_sched_t sched, ggml_backe
     return ggml_gallocr_get_buffer_size(sched->galloc, backend_index);
 }
 
+// True when the compute buffer is a borrowed range rather than one the scheduler
+// allocated, so get_buffer_size is not comparable against a reserved size.
+bool ggml_backend_sched_buffer_is_external(ggml_backend_sched_t sched, ggml_backend_t backend) {
+    GGML_ASSERT(sched);
+    int backend_index = ggml_backend_sched_backend_id(sched, backend);
+    GGML_ASSERT(backend_index >= 0 && backend_index < sched->n_backends);
+
+    return ggml_gallocr_buffer_is_external(sched->galloc, backend_index);
+}
+
 // Map a scheduler backend to its allocator slot and retain graph workspace.
 bool ggml_backend_sched_set_buffer_range(
         ggml_backend_sched_t sched, ggml_backend_t backend, ggml_backend_buffer_t buffer, size_t offset, size_t size) {

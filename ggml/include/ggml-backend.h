@@ -352,6 +352,7 @@ extern "C" {
 
     GGML_API ggml_backend_buffer_type_t ggml_backend_sched_get_buffer_type(ggml_backend_sched_t sched, ggml_backend_t backend);
     GGML_API size_t                     ggml_backend_sched_get_buffer_size(ggml_backend_sched_t sched, ggml_backend_t backend);
+    GGML_API bool                       ggml_backend_sched_buffer_is_external(ggml_backend_sched_t sched, ggml_backend_t backend);
 
     // The scheduler retains the buffer until it is freed.
     // Set the range after size measurement and before reserve.

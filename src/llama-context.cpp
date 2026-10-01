@@ -608,7 +608,12 @@ llama_context::~llama_context() {
                 size_exp = shared.workspace_bytes;
             }
             const size_t size_act = ggml_backend_sched_get_buffer_size(sched.get(), backend);
-            if (size_exp == size_act) {
+            if (ggml_backend_sched_buffer_is_external(sched.get(), backend)) {
+                // a borrowed range replaced the reserved buffer, so the two sizes
+                // describe different things and cannot be compared
+                LLAMA_LOG_DEBUG("%s: %10s compute buffer is a %8.4f MiB borrowed range\n",
+                    __func__, ggml_backend_buft_name(buft), size_act / (1024.0*1024.0));
+            } else if (size_exp == size_act) {
                 LLAMA_LOG_DEBUG("%s: %10s compute buffer size is %8.4f MiB, matches expectation of %8.4f MiB\n",
                     __func__, ggml_backend_buft_name(buft), size_act / (1024.0*1024.0), size_exp / (1024.0*1024.0));
             } else {
