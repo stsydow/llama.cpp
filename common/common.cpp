@@ -28,6 +28,7 @@
 #include <iterator>
 #include <regex>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -1163,15 +1164,12 @@ struct common_init_result::impl {
 };
 
 static const std::map<common_decision_type, std::string> COMMON_DECISION_TYPE_NAMES = {
-    { COMMON_DECISION_TYPE_OPENJEV,        "openjev"       },
-    { COMMON_DECISION_TYPE_LEV,            "lev"           },
-    { COMMON_DECISION_TYPE_KEV,            "kev"           },
-    { COMMON_DECISION_TYPE_NIMBLE,         "nimble"        },
-    { COMMON_DECISION_TYPE_LAYA,           "laya"          },
-    { COMMON_DECISION_TYPE_CLEF,           "clef"          },
-    { COMMON_DECISION_TYPE_PPLX_DECIDER,   "pplx-decider"  },
-    { COMMON_DECISION_TYPE_LFM2_D1,        "lfm2-d1"       },
-    { COMMON_DECISION_TYPE_LFM2_D1_OMNI,   "lfm2-d1-omni"  },
+    { COMMON_DECISION_TYPE_OPENJEV, "openjev" },
+    { COMMON_DECISION_TYPE_LEV,     "lev"     },
+    { COMMON_DECISION_TYPE_KEV,     "kev"     },
+    { COMMON_DECISION_TYPE_NIMBLE,  "nimble"  },
+    { COMMON_DECISION_TYPE_LAYA,    "laya"    },
+    { COMMON_DECISION_TYPE_CLEF,    "clef"    },
 };
 
 static common_decision_type common_decision_type_from_string(const std::string & str) {
@@ -1230,6 +1228,39 @@ common_decision_type common_get_decision_type(const std::string & fname) {
     return common_decision_type_from_string(gguf_get_val_str(gguf_ctx.get(), type_id));
 }
 
+bool common_params_uses_streamed_mtp(const common_params & params) {
+    return (params.kv_stream_pool_bytes || params.shared_device_memory_bytes) &&
+        std::find(params.speculative.types.begin(), params.speculative.types.end(),
+            COMMON_SPECULATIVE_TYPE_DRAFT_MTP) != params.speculative.types.end();
+}
+
+uint32_t common_kv_stream_auxiliary_layers(const common_params & params, int32_t model_nextn_layers) {
+    if (!common_params_uses_streamed_mtp(params)) {
+        if (params.kv_stream_auxiliary_layers) {
+            throw std::invalid_argument("the auxiliary KV layer setting requires streamed embedded MTP");
+        }
+        return 0;
+    }
+    if (params.speculative.has_dft()) {
+        throw std::invalid_argument("adaptive KV requires embedded MTP, not a separate draft model");
+    }
+    if (std::any_of(params.speculative.types.begin(), params.speculative.types.end(), [](auto type) {
+            return type != COMMON_SPECULATIVE_TYPE_NONE && type != COMMON_SPECULATIVE_TYPE_DRAFT_MTP;
+        })) {
+        throw std::invalid_argument("adaptive KV speculation supports only draft-mtp");
+    }
+    if (model_nextn_layers <= 0) {
+        throw std::invalid_argument("the loaded model reports no MTP layers");
+    }
+    const uint32_t count = uint32_t(model_nextn_layers);
+    if (params.kv_stream_auxiliary_layers && params.kv_stream_auxiliary_layers != count) {
+        throw std::invalid_argument(string_format(
+            "--kv-stream-auxiliary-layers %u does not match the model's %u MTP layers",
+            params.kv_stream_auxiliary_layers, count));
+    }
+    return count;
+}
+
 common_init_result::common_init_result(common_params & params, bool model_only) :
     pimpl(new impl{}) {
     auto mparams = common_model_params_to_llama(params);
@@ -1280,13 +1311,22 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
         return;
     }
 
+    try {
+        cparams.kv_stream_auxiliary_layers = common_kv_stream_auxiliary_layers(params, llama_model_n_layer_nextn(model));
+    } catch (const std::invalid_argument & error) {
+        COM_ERR("%s\n", error.what());
+        return;
+    }
+    if (cparams.kv_stream_auxiliary_layers) {
+        COM_INF("adaptive MTP: using %u auxiliary KV layer(s) from model metadata\n", cparams.kv_stream_auxiliary_layers);
+    }
+
     const llama_vocab * vocab = llama_model_get_vocab(model);
 
     // these decision models return a score for each token via the embeddings output
     // TODO: maybe improve this in the future
     const auto decision_type = common_get_decision_type(model);
-    if (decision_type == COMMON_DECISION_TYPE_LAYA || decision_type == COMMON_DECISION_TYPE_KEV || decision_type == COMMON_DECISION_TYPE_CLEF ||
-        decision_type == COMMON_DECISION_TYPE_LFM2_D1_OMNI) {
+    if (decision_type == COMMON_DECISION_TYPE_LAYA || decision_type == COMMON_DECISION_TYPE_KEV || decision_type == COMMON_DECISION_TYPE_CLEF) {
         params.embedding    = true;
         params.pooling_type = LLAMA_POOLING_TYPE_NONE;
 
@@ -1694,10 +1734,8 @@ struct llama_context_params common_context_params_to_llama(const common_params &
 
     cparams.n_ctx             = params.n_ctx;
     cparams.n_seq_max         = params.n_parallel;
-    const bool streamed_mtp = params.kv_stream_auxiliary_layers == 1 &&
-        std::find(params.speculative.types.begin(), params.speculative.types.end(),
-            COMMON_SPECULATIVE_TYPE_DRAFT_MTP) != params.speculative.types.end();
-    cparams.n_rs_seq          = params.kv_stream_auxiliary_layers && (!streamed_mtp || params.no_kv_stream_rs_rollback) ?
+    const bool streamed_mtp = common_params_uses_streamed_mtp(params);
+    cparams.n_rs_seq          = (params.kv_stream_auxiliary_layers && !streamed_mtp) || params.no_kv_stream_rs_rollback ?
                                 0 : params.speculative.need_n_rs_seq();
     cparams.n_outputs_max     = std::max(params.n_outputs_max, 0);
     cparams.n_outputs_max_per_seq = std::max(params.n_outputs_max_per_seq, 0);
@@ -1731,8 +1769,6 @@ struct llama_context_params common_context_params_to_llama(const common_params &
 
     cparams.type_k = params.cache_type_k;
     cparams.type_v = params.cache_type_v;
-
-    cparams.moe_cache_size = params.moe_cache_size;
 
     return cparams;
 }
