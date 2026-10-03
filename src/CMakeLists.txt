@@ -71,6 +71,8 @@ set(LLAMA_CORE_SOURCES
     llama-kv-stream-mtp-proxy.h
     llama-kv-stream-policy.cpp
     llama-kv-stream-policy.h
+    llama-kv-stream-positions.cpp
+    llama-kv-stream-positions.h
     llama-kv-stream-prefetch.h
     llama-kv-stream-publication.cpp
     llama-kv-stream-publication.h
