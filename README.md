@@ -16,7 +16,7 @@ The figure compares V2 with draft lengths 0-3, not V1 against V2. On an RTX 5070
 Build from the repository root:
 
 ```sh
-cmake -S . -B build-v2 -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-v2 -DGGML_CUDA=ON -DGGML_CUDA_FA_QUANTS=all -DCMAKE_BUILD_TYPE=Release
 cmake --build build-v2 --target llama-server -j
 ```
 
